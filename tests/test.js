@@ -3,11 +3,12 @@
 const assert = require("assert");
 const fs = require("fs");
 const { resolve } = require("path");
+const exec = require("child_process").exec;
 
 const ethers = require("ethers");
 const { compile } = require("@ethersproject/cli/solc");
 
-const Takoyaki = require("../lib");
+const Takoyaki = require('./takoyaki');
 
 const ens = require("./ens");
 const { SourceMapper } = require("./source-mapper");
@@ -19,6 +20,24 @@ const { SourceMapper } = require("./source-mapper");
 let provider = null;
 let admin = null;
 let ABI = null;
+let wallet = null;
+let takoyakiContract = null;
+
+const GRACE_PERIOD = 30;
+const REGISTRATION_PERIOD = 366;
+
+const fastForwardDays = nDays => {
+  return new Promise((resolve, reject) => {
+    exec(`sudo date -s '${nDays} days'`, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(stdout);
+    });
+  });
+};
 
 before(async function() {
     // Compile Takoyaki Registrar
@@ -45,14 +64,27 @@ before(async function() {
     try {
         code = compile(sourceMapper.source, {
             optimize: true
-        }).filter((contract) => (contract.name === "TakoyakiRegistrar"))[0];
+        }).filter((contract) => (contract.name === contractName))[0];
+
+        return code;
+
     } catch (e) {
         e.errors.forEach((error) => {
             console.log(error);
         });
-        throw new Error("Failed to compile TakoyakiRegistrar.sol");
+        throw new Error(`Failed to compile ${filename}`);
     }
+}
+
+before(async function() {
+    // Compile Takoyaki Registrar
+    console.log("Compiling TakoyakiRegistrar...");
+    const code = compileContract("TakoyakiRegistrar.sol", "TakoyakiRegistrar");
     ABI = code.interface;
+
+    // Compile Wallet
+    console.log("Compiling Wallet...");
+    const walletCode = compileContract("Wallet.sol", "Wallet");
 
     // Deploy ENS
     console.log("Deploying ENS...");
@@ -75,6 +107,14 @@ before(async function() {
 
     // Give takoyaki.eth to the Takoyaki Registrar (as the owner and resolver)
     await provider.register("takoyaki.eth", contract.address, contract.address);
+    takoyakiContract = Takoyaki.connect(provider);
+
+    // Deploy Wallet contract
+    console.log("Deploying Wallet...");
+    const walletFactory = new ethers.ContractFactory(walletCode.interface, walletCode.bytecode, admin);
+    wallet = await walletFactory.deploy({ gasLimit: 4300000 });
+    await wallet.deployed();
+
 });
 
 describe("Check Config", async function() {
@@ -122,10 +162,23 @@ describe("Check Config", async function() {
 
 describe("Admin Tasks", function() {
     describe("Withdraw Funds", function() {
-        it("allows admin to withdraw", function() {
+        it("allows admin to withdraw", async function() {
+           const takoyaki = Takoyaki.connect(admin);
+           const tx = await takoyaki.withdraw("0");
+           assert.doesNotReject(tx.wait().then(receipt => {
+              const regex = /^0x[a-f0-9]{64}/;
+              assert.ok(regex.test(receipt.transactionHash), "transaction hash is invalid");
+           }));
         });
 
-        it("prevents non-admin from  withdrawing", function() {
+        it("prevents non-admin from  withdrawing", async function() {
+           const signer = await provider.createSigner();
+           const takoyaki = Takoyaki.connect(signer);
+           const tx = await takoyaki.withdraw("0");
+           assert.rejects(tx.wait().then(receipt => {
+              assert.fail("non-admin should not be able to withdraw");
+           }),
+           { reason: 'transaction failed'});
         });
     });
 
@@ -177,8 +230,187 @@ describe("Name Registration (happy path)", function() {
     });
 });
 
+describe('Renew registration', function() {
+  it('can renew after reveal', async function() {
+    const label = 'bumble';
+    const signer = await provider.createSigner("0.22");
+    let receipt = await Takoyaki.register(provider, signer, label);
+    const tokenId = Takoyaki.getTokenId(receipt);
+
+    const takoyaki = Takoyaki.connect(signer);
+    const tx = await takoyaki.renew(tokenId, { value: ethers.utils.parseEther("0.1") });
+    await tx.wait();
+
+    const token = await takoyaki.getTakoyaki(tokenId);
+    assert.equal(
+      token.status,
+      2,
+      `expect status to be 2 but got ${token.status}`
+    );
+  });
+});
+
+describe('Destroy registration', function() {
+  it('can destroy after reveal', async function() {
+    this.timeout(0);
+    const label = 'klaus';
+    let signer = await provider.createSigner();
+
+    const receipt = await Takoyaki.register(provider, signer, label);
+    const tokenId = Takoyaki.getTokenId(receipt);
+
+    // fast forward to grace period
+    await fastForwardDays(REGISTRATION_PERIOD + GRACE_PERIOD + 1);
+    await provider.mineBlocks(1);
+
+    const takoyaki = Takoyaki.connect(signer);
+    const tx = await takoyaki.destroy(tokenId);
+    await tx.wait();
+
+    const token = await takoyaki.getTakoyaki(tokenId);
+    assert.equal(
+      token.status,
+      0,
+      `expect status to be 0 but got ${token.status}`
+    );
+  });
+});
+
 describe("ERC-721 Operations", function() {
-    // @TODO: Transfer, etc...
+    let   signer;
+    let   newOwner;
+
+    before(async function(){
+        signer = await provider.createSigner("2");
+        newOwner = await provider.createSigner();
+    });
+
+    it(`can get blinded commitment`, async function() {
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          'starlink'
+        );
+
+        const commitment = await takoyakiContract.getBlindedCommit(blindedCommit);
+        assert.equal(commitment.payer, signer.address, 'not payer for ens');
+        assert.ok(
+          commitment.feePaid.eq(ethers.utils.parseEther('0.1')),
+          'feePaid mismatch'
+        );
+    });
+
+    it.skip(`can cancel commitment`, async function() {
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          'spiderman'
+        );
+
+        // can only cancel after n blocks
+        // await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
+
+        const balance = await provider.getBalance(signer.address);
+
+        const takoyaki = Takoyaki.connect(signer);
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        const receipt = await tx.wait();
+
+        const cancelEvent = Takoyaki.getEvent(receipt, 'Cancelled');
+        assert.ok(cancelEvent);
+        assert.ok(cancelEvent.values.length === 2);
+        assert.equal(
+          blindedCommit,
+          cancelEvent.values[1],
+          'blindedCommit mismatch'
+        );
+
+        const newBalance = await provider.getBalance(signer.address);
+        assert.ok(newBalance.gt(balance), 'balance should be greater');
+    });
+
+    it(`can register with correct tokenURI`, async function() {
+        const uriPrefix = 'https://takoyaki.nftmd.com/json/';
+        const label = 'zelda';
+        const ensName = `${label}.takoyaki.eth`;
+
+        const receipt = await Takoyaki.register(provider, signer, label);
+
+        const tokenId = Takoyaki.getTokenId(receipt);
+
+        const tokenOwner = await takoyakiContract.ownerOf(tokenId);
+        assert.equal(tokenOwner, signer.address);
+
+        const tokenURI = await takoyakiContract.tokenURI(tokenId);
+        assert.equal(
+          tokenURI,
+          `${uriPrefix}318ae6d0db4a394a61e1e763192966436a00f74c1f87b065808bdb7205125bcc`,
+          'tokenURI mismatch'
+        );
+
+        const owner = await provider.resolveName(ensName);
+        assert.equal(owner, signer.address, `${ensName} owner is not buyer`);
+    });
+
+    it('can safeTransferFrom without data', async function() {
+        const receipt = await Takoyaki.register(provider, signer, 'transfer');
+        const tokenId = Takoyaki.getTokenId(receipt);
+
+        // transfer the token to newOwner
+        await Takoyaki.safeTransfer(signer, newOwner, tokenId);
+        const tokenOwner = await takoyakiContract.ownerOf(tokenId);
+
+        // after transfer, the newOwner should own the token
+        assert.equal(tokenOwner, newOwner.address);
+    });
+
+    it('can safeTransferFrom with data', async function() {
+        const receipt = await Takoyaki.register(provider, signer, 'transferData');
+        const tokenId = Takoyaki.getTokenId(receipt);
+
+        // transfer to a wallet contract that can accept data
+        // '0xd09de08a' is the call to wallet.increment()
+        await Takoyaki.safeTransfer(signer, wallet, tokenId, '0xd09de08a');
+        const tokenOwner = await takoyakiContract.ownerOf(tokenId);
+
+        // after transfer, the wallet should own the token
+        assert.equal(tokenOwner, wallet.address);
+
+        const count = await wallet.count();
+        assert.equal(count, 1, 'wallet count should equal 1');
+    });
+
+    it('safeTransferFrom with wrong owner should throw', async function() {
+        const receipt = await Takoyaki.register(provider, signer, 'wrongOwner');
+        const tokenId = Takoyaki.getTokenId(receipt);
+
+        let error = null;
+        try {
+            await Takoyaki.safeTransfer(newOwner, wallet, tokenId);
+        } catch (err) {
+            error = err;
+        }
+
+        if (!error) {
+            assert.fail('safeTransfer with wrong owner should fail but did not!!!');
+        }
+
+        assert.ok(error.code === 'CALL_EXCEPTION');
+    });
+
+    it('getTakoyaki() during grace period should return status 1', async function() {
+        this.timeout(0);
+
+        const receipt = await Takoyaki.register(provider, signer, 'grace');
+
+        // fast forward to grace period
+        await fastForwardDays(REGISTRATION_PERIOD + 1);
+        await provider.mineBlocks(1);
+
+        const tokenId = Takoyaki.getTokenId(receipt);
+        const token = await takoyakiContract.getTakoyaki(tokenId);
+        assert.equal(token.status, 1, 'status should be in grace period');
+    });
 });
 
 describe("Name Validatation", function() {

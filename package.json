@@ -8,7 +8,9 @@
     "setup-heroku": "heroku git:remote -a takoyaki-meta",
     "flatten": "meeseeks flatten index.html > dist/index.html",
     "dist": "./build.sh",
-    "test": "mocha --timeout 600000 tests/test"
+    "test": "mocha --timeout 600000 tests/test",
+    "test-time-change": "mocha --timeout 600000 tests/test-reveal-past-due",
+    "test-unix-command": "mocha --timeout 600000 tests/test-unix-command"
   },
   "keywords": [
     "Ethereum",
