@@ -64,27 +64,32 @@ before(async function() {
     try {
         code = compile(sourceMapper.source, {
             optimize: true
-        }).filter((contract) => (contract.name === contractName))[0];
-
-        return code;
-
+        }).filter((contract) => (contract.name === "TakoyakiRegistrar"))[0];
     } catch (e) {
+        console.log(e);
         e.errors.forEach((error) => {
             console.log(error);
         });
-        throw new Error(`Failed to compile ${filename}`);
+        throw new Error('Failed to compile TakoyakiRegistrar.sol');
     }
-}
-
-before(async function() {
-    // Compile Takoyaki Registrar
-    console.log("Compiling TakoyakiRegistrar...");
-    const code = compileContract("TakoyakiRegistrar.sol", "TakoyakiRegistrar");
     ABI = code.interface;
 
     // Compile Wallet
     console.log("Compiling Wallet...");
-    const walletCode = compileContract("Wallet.sol", "Wallet");
+    const walletSource = fs.readFileSync(resolve(__dirname, "../contracts/Wallet.sol")).toString();
+
+    let walletSourceMapper = new SourceMapper(walletSource);
+    let walletCode = null;
+    try {
+        walletCode = compile(walletSourceMapper.source, {
+            optimize: true
+        }).filter((contract) => (contract.name === "Wallet"))[0];
+    } catch (e) {
+        e.errors.forEach((error) => {
+            console.log(error);
+        });
+        throw new Error('Failed to compile Wallet.sol');
+    }
 
     // Deploy ENS
     console.log("Deploying ENS...");
