@@ -23,12 +23,12 @@ let ABI = null;
 let wallet = null;
 let takoyakiContract = null;
 
-const GRACE_PERIOD = 30;
-const REGISTRATION_PERIOD = 366;
+const GRACE_PERIOD = 2;
+const REGISTRATION_PERIOD = 12;
 
-const fastForwardDays = nDays => {
+const fastForward = nMinutes => {
   return new Promise((resolve, reject) => {
-    exec(`sudo date -s '${nDays} days'`, (error, stdout) => {
+    exec(`sudo date -s '${nMinutes} minutes'`, (error, stdout) => {
       if (error) {
         reject(error);
         return;
@@ -266,8 +266,8 @@ describe('Destroy registration', function() {
     const receipt = await Takoyaki.register(provider, signer, label);
     const tokenId = Takoyaki.getTokenId(takoyaki, receipt);
 
-    // fast forward to grace period
-    await fastForwardDays(REGISTRATION_PERIOD + GRACE_PERIOD + 1);
+    // fast forward to past grace period
+    await fastForward(REGISTRATION_PERIOD + GRACE_PERIOD + 1);
     await provider.mineBlocks(1);
 
     const tx = await takoyaki.destroy(tokenId);
@@ -411,7 +411,7 @@ describe("ERC-721 Operations", function() {
         const receipt = await Takoyaki.register(provider, signer, 'grace');
 
         // fast forward to grace period
-        await fastForwardDays(REGISTRATION_PERIOD + 1);
+        await fastForward(REGISTRATION_PERIOD + 1);
         await provider.mineBlocks(1);
 
         const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
