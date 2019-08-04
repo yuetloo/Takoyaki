@@ -3,9 +3,9 @@
 const ethers = require('ethers');
 const Takoyaki = require('../lib');
 
-const getEvent = (receipt, eventName) =>
+const getEvent = (contract, receipt, eventName) =>
   receipt.logs
-    .map(log => Takoyaki.iface().parseLog(log))
+    .map(log => contract.interface.parseLog(log))
     .filter(Boolean)
     .find(({ name }) => name === eventName);
 
@@ -29,8 +29,8 @@ const register = async (provider, signer, label) => {
   return receipt;
 };
 
-const getTokenId = receipt => {
-  const transferEvent = getEvent(receipt, 'Transfer');
+const getTokenId = (contract, receipt) => {
+  const transferEvent = getEvent(contract, receipt, 'Transfer');
 
   if (!transferEvent) {
     throw new Error('Missing transfer event');
@@ -78,7 +78,7 @@ const submitBlindedCommit = async (provider, signer, label) => {
   const receipt = await tx.wait();
   await provider.mineBlocks(5);
 
-  const commitEvent = getEvent(receipt, 'Committed');
+  const commitEvent = getEvent(takoyaki, receipt, 'Committed');
   if (!commitEvent) {
     throw new Error('missing commit event');
   }
@@ -96,7 +96,6 @@ const submitBlindedCommit = async (provider, signer, label) => {
 };
 
 module.exports = {
-  createSigner: Takoyaki.createSigner,
   connect: Takoyaki.connect,
   getEvent,
   getTokenId,

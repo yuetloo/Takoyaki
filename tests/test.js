@@ -240,9 +240,10 @@ describe('Renew registration', function() {
     const label = 'bumble';
     const signer = await provider.createSigner("0.22");
     let receipt = await Takoyaki.register(provider, signer, label);
-    const tokenId = Takoyaki.getTokenId(receipt);
 
     const takoyaki = Takoyaki.connect(signer);
+    const tokenId = Takoyaki.getTokenId(takoyaki, receipt);
+
     const tx = await takoyaki.renew(tokenId, { value: ethers.utils.parseEther("0.1") });
     await tx.wait();
 
@@ -261,14 +262,14 @@ describe('Destroy registration', function() {
     const label = 'klaus';
     let signer = await provider.createSigner();
 
+    const takoyaki = Takoyaki.connect(signer);
     const receipt = await Takoyaki.register(provider, signer, label);
-    const tokenId = Takoyaki.getTokenId(receipt);
+    const tokenId = Takoyaki.getTokenId(takoyaki, receipt);
 
     // fast forward to grace period
     await fastForwardDays(REGISTRATION_PERIOD + GRACE_PERIOD + 1);
     await provider.mineBlocks(1);
 
-    const takoyaki = Takoyaki.connect(signer);
     const tx = await takoyaki.destroy(tokenId);
     await tx.wait();
 
@@ -291,13 +292,14 @@ describe("ERC-721 Operations", function() {
     });
 
     it(`can get blinded commitment`, async function() {
+        const takoyaki = Takoyaki.connect(signer);
         const blindedCommit = await Takoyaki.submitBlindedCommit(
           provider,
           signer,
           'starlink'
         );
 
-        const commitment = await takoyakiContract.getBlindedCommit(blindedCommit);
+        const commitment = await takoyaki.getBlindedCommit(blindedCommit);
         assert.equal(commitment.payer, signer.address, 'not payer for ens');
         assert.ok(
           commitment.feePaid.eq(ethers.utils.parseEther('0.1')),
@@ -306,6 +308,7 @@ describe("ERC-721 Operations", function() {
     });
 
     it.skip(`can cancel commitment`, async function() {
+        const takoyaki = Takoyaki.connect(signer);
         const blindedCommit = await Takoyaki.submitBlindedCommit(
           provider,
           signer,
@@ -317,11 +320,10 @@ describe("ERC-721 Operations", function() {
 
         const balance = await provider.getBalance(signer.address);
 
-        const takoyaki = Takoyaki.connect(signer);
         const tx = await takoyaki.cancelCommitment(blindedCommit);
         const receipt = await tx.wait();
 
-        const cancelEvent = Takoyaki.getEvent(receipt, 'Cancelled');
+        const cancelEvent = Takoyaki.getEvent(takoyaki, receipt, 'Cancelled');
         assert.ok(cancelEvent);
         assert.ok(cancelEvent.values.length === 2);
         assert.equal(
@@ -341,7 +343,7 @@ describe("ERC-721 Operations", function() {
 
         const receipt = await Takoyaki.register(provider, signer, label);
 
-        const tokenId = Takoyaki.getTokenId(receipt);
+        const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
 
         const tokenOwner = await takoyakiContract.ownerOf(tokenId);
         assert.equal(tokenOwner, signer.address);
@@ -359,7 +361,7 @@ describe("ERC-721 Operations", function() {
 
     it('can safeTransferFrom without data', async function() {
         const receipt = await Takoyaki.register(provider, signer, 'transfer');
-        const tokenId = Takoyaki.getTokenId(receipt);
+        const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
 
         // transfer the token to newOwner
         await Takoyaki.safeTransfer(signer, newOwner, tokenId);
@@ -371,7 +373,7 @@ describe("ERC-721 Operations", function() {
 
     it('can safeTransferFrom with data', async function() {
         const receipt = await Takoyaki.register(provider, signer, 'transferData');
-        const tokenId = Takoyaki.getTokenId(receipt);
+        const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
 
         // transfer to a wallet contract that can accept data
         // '0xd09de08a' is the call to wallet.increment()
@@ -387,7 +389,7 @@ describe("ERC-721 Operations", function() {
 
     it('safeTransferFrom with wrong owner should throw', async function() {
         const receipt = await Takoyaki.register(provider, signer, 'wrongOwner');
-        const tokenId = Takoyaki.getTokenId(receipt);
+        const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
 
         let error = null;
         try {
@@ -412,7 +414,7 @@ describe("ERC-721 Operations", function() {
         await fastForwardDays(REGISTRATION_PERIOD + 1);
         await provider.mineBlocks(1);
 
-        const tokenId = Takoyaki.getTokenId(receipt);
+        const tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
         const token = await takoyakiContract.getTakoyaki(tokenId);
         assert.equal(token.status, 1, 'status should be in grace period');
     });
