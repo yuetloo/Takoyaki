@@ -25,6 +25,8 @@ let takoyakiContract = null;
 
 const GRACE_PERIOD = 2;
 const REGISTRATION_PERIOD = 12;
+const MAX_COMMIT_BLOCKS = 10;
+const WAIT_CANCEL_BLOCKS = 16;
 
 const fastForward = nMinutes => {
   return new Promise((resolve, reject) => {
@@ -46,8 +48,8 @@ before(async function() {
 
     let sourceMapper = new SourceMapper(source);
     sourceMapper.set("MIN_COMMIT_BLOCKS", null);
-    sourceMapper.set("MAX_COMMIT_BLOCKS", "10");
-    sourceMapper.set("WAIT_CANCEL_BLOCKS", "16");
+    sourceMapper.set("MAX_COMMIT_BLOCKS", `${MAX_COMMIT_BLOCKS}`);
+    sourceMapper.set("WAIT_CANCEL_BLOCKS", `${WAIT_CANCEL_BLOCKS}`);
     sourceMapper.set("REGISTRATION_PERIOD", "(12 minutes)");
     sourceMapper.set("GRACE_PERIOD", "(2 minutes)");
 
@@ -307,7 +309,7 @@ describe("ERC-721 Operations", function() {
         );
     });
 
-    it.skip(`can cancel commitment`, async function() {
+    it(`can cancel commitment`, async function() {
         const takoyaki = Takoyaki.connect(signer);
         const blindedCommit = await Takoyaki.submitBlindedCommit(
           provider,
@@ -316,7 +318,7 @@ describe("ERC-721 Operations", function() {
         );
 
         // can only cancel after n blocks
-        // await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
+        await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
 
         const balance = await provider.getBalance(signer.address);
 
