@@ -424,7 +424,7 @@ describe("Name Validatation", function() {
     describe("Valid Names", function() {
         [ "loo", "ricmoo", "ricmoo01234567890123",
           "0yfoobar", "1xfoobar", "1Xfoobar",
-          "12345", "hello"
+          "12345", "hello", "lo", "r"
         ].forEach((name) => {
             it(name, function() {
                 let contract = new ethers.Contract("takoyaki.eth", ABI, provider);
@@ -436,14 +436,10 @@ describe("Name Validatation", function() {
     });
 
     describe("Invalid Names", function() {
-        [ "lo", "r", "ricmoo012345678901234",
+        [ "ricmoo012345678901234",
           "0xfoobar", "0Xfoobar"
         ].forEach((name) => {
             it(name, function() {
-                if( ["lo", "r"].find((n) => n === name) ) {
-                    this.skip();
-                }
-
                 let contract = new ethers.Contract("takoyaki.eth", ABI, provider);
                 contract.isValidLabel(name).then((isValid) => {
                     assert.ok(!isValid, name);
