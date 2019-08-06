@@ -348,11 +348,18 @@ describe("ERC-721 Operations", function() {
         const tokenOwner = await takoyakiContract.ownerOf(tokenId);
         assert.equal(tokenOwner, signer.address);
 
-        const tokenURI = await takoyakiContract.tokenURI(tokenId);
+        const tokenURI = await takoyakiContract.tokenURI(tokenId.toHexString());
         assert.equal(
           tokenURI,
           `${uriPrefix}318ae6d0db4a394a61e1e763192966436a00f74c1f87b065808bdb7205125bcc`,
           'tokenURI mismatch'
+        );
+
+        const tokenURIFromContract = await takoyakiContract.functions.tokenURI(tokenId);
+        assert.equal(
+          tokenURIFromContract,
+          tokenURI,
+          'tokenURI and tokenURIFromContract mismatch'
         );
 
         const owner = await provider.resolveName(ensName);
