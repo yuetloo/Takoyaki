@@ -308,7 +308,7 @@ describe("Commits and reveals", function() {
     it('should fail subsequent reveal if the name has expired but within grace period', async function() {
         this.timeout(0);
 
-        const label = 'tree';
+        const label = 'treasure';
         let error = null;
 
         try {
