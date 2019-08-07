@@ -289,8 +289,8 @@ describe("ERC-721 Operations", function() {
     let   newOwner;
 
     before(async function(){
-        signer = await provider.createSigner("2");
-        newOwner = await provider.createSigner();
+        signer = await provider.createSigner("5");
+        newOwner = await provider.createSigner("2");
     });
 
     it(`can get blinded commitment`, async function() {
@@ -336,6 +336,127 @@ describe("ERC-721 Operations", function() {
 
         const newBalance = await provider.getBalance(signer.address);
         assert.ok(newBalance.gt(balance), 'balance should be greater');
+    });
+
+    it(`Cannot cancel commitment if it had already been cancelled`, async function() {
+        const takoyaki = Takoyaki.connect(signer);
+        const label = "star";
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          label
+        );
+
+        // can only cancel after n blocks
+        await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
+
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        const receipt = await tx.wait();
+
+        const tx2 = await takoyaki.cancelCommitment(blindedCommit);
+        let error = null;
+        try {
+            await tx2.wait();
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "cancellation should fail");
+
+    });
+
+    it(`Cannot cancel commitment if the takoyaki does not have enough balance`, async function() {
+        const label = "forces";
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          label
+        );
+
+        
+        let takoyaki = Takoyaki.connect(admin);
+        const balance = await provider.getBalance(takoyaki.address);
+        const withdrawTx = await takoyaki.withdraw(balance);
+        await withdrawTx.wait();
+        
+        // can only cancel after n blocks
+        await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
+
+        takoyaki = Takoyaki.connect(signer);
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        let error = null;
+        try {
+            await tx.wait();
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "cancellation should fail");
+
+    });
+
+    it("Cannot cancel commitment before MAX_COMMIT_BLOCKS + MAX_CANCEl_BLOCKS has been mined", async function() {
+        const label = "flash";
+        const takoyaki = Takoyaki.connect(signer);
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          label
+        );
+
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        let error = null;
+        try {
+           const receipt = await tx.wait();
+        } catch ( err ) {
+          error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "cancellation should fail");
+    });
+
+    it("Cannot cancel commitment after revelation", async function() {
+        const label = "gameofthrone";
+        const receipt = await Takoyaki.register(provider, signer, label);
+        const takoyaki = Takoyaki.connect(signer);
+        const salt = await provider.getTransaction(receipt.transactionHash).then(tx => {
+            const parsedTx = takoyaki.interface.parseTransaction(tx);
+            assert.ok(parsedTx.args.length === 3);
+            return parsedTx.args[2];
+        });
+        const blindedCommit = await takoyaki.makeBlindedCommitment(label, signer.address, salt);
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        let error = null;
+        try {
+           const receipt = await tx.wait();
+        } catch ( err ) {
+          error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "cancellation should fail");
+    });
+
+    it("Cannot cancel commitment owned by others", async function() {
+        const label = "champion";
+        const blindedCommit = await Takoyaki.submitBlindedCommit(
+          provider,
+          signer,
+          label
+        );
+
+        // can only cancel after n blocks
+        await provider.mineBlocks(MAX_COMMIT_BLOCKS + WAIT_CANCEL_BLOCKS);
+
+        const takoyaki = Takoyaki.connect(newOwner);
+        const tx = await takoyaki.cancelCommitment(blindedCommit);
+        let error = null;
+        try {
+           const receipt = await tx.wait();
+        } catch ( err ) {
+          error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "cancellation should fail");
     });
 
     it(`can register with correct tokenURI`, async function() {
