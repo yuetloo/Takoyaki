@@ -95,11 +95,26 @@ const submitBlindedCommit = async (provider, signer, label) => {
   return blindedCommit;
 };
 
+const syncUpkeepFee = async (admin, signer, tokenId) => {
+    const takoyaki = Takoyaki.connect(signer);
+    const smallerFee = await takoyaki.getTakoyaki(tokenId).then(token => token.upkeepFee.sub(1));
+
+    const takoyakiAdmin = Takoyaki.connect(admin);
+    const feeTx = await takoyakiAdmin.setFee(smallerFee);
+    await feeTx.wait();
+
+    const syncTx = await takoyaki.syncUpkeepFee(tokenId);
+    await syncTx.wait();
+
+    return smallerFee;
+};
+
 module.exports = {
   connect: Takoyaki.connect,
   getEvent,
   getTokenId,
   register,
   safeTransfer,
-  submitBlindedCommit
+  submitBlindedCommit,
+  syncUpkeepFee
 };

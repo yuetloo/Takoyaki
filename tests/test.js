@@ -27,6 +27,7 @@ const GRACE_PERIOD = 2;
 const REGISTRATION_PERIOD = 12;
 const MAX_COMMIT_BLOCKS = 10;
 const WAIT_CANCEL_BLOCKS = 16;
+const DEFAULT_FEE = ethers.utils.parseEther("0.1");
 
 const fastForward = nMinutes => {
   return new Promise((resolve, reject) => {
@@ -282,6 +283,95 @@ describe('Destroy registration', function() {
       `expect status to be 0 but got ${token.status}`
     );
   });
+});
+
+describe("syncUpkeepFee()", function() {
+    let tokenId = null;
+    let owner = null;
+    let nonOwner = null;
+
+    before(async function(){
+        owner = await provider.createSigner("2");
+        nonOwner = await provider.createSigner("2");
+        const label = "circle";
+        const receipt = await Takoyaki.register(provider, owner, label);
+        tokenId = Takoyaki.getTokenId(takoyakiContract, receipt);
+    });
+
+    after(async function(){
+        const takoyaki = Takoyaki.connect(admin);
+        const tx = await takoyaki.setFee(DEFAULT_FEE);
+        await tx.wait();
+    });
+
+    it("should work if called by token owner", async function() {
+        let error = null;
+        let updatedFee = null;
+
+        try {
+            updatedFee = await Takoyaki.syncUpkeepFee(admin, owner, tokenId);
+        } catch (err) {
+            error = err;
+        }
+
+
+        const token = await takoyakiContract.getTakoyaki(tokenId);
+
+        assert.ok(error === null, "sync upkeep fee should not throw");
+        assert.ok(updatedFee && token.upkeepFee.eq(updatedFee), "token should have new upkeep fee");
+    });
+
+    it("should work if called by non token owner", async function() {
+        let error = null;
+        let updatedFee = null;
+
+        try {
+            updatedFee = await Takoyaki.syncUpkeepFee(admin, admin, tokenId);
+        } catch (err) {
+            error = err;
+        }
+
+
+        const token = await takoyakiContract.getTakoyaki(tokenId);
+
+        assert.ok(error === null, "sync upkeep fee should not throw");
+        assert.ok(updatedFee !== null, "fee should be updated");
+        assert.ok(token.upkeepFee.eq(updatedFee), "token should have new upkeep fee");
+    });
+
+    it("should fail for token that has expired", async function() {
+        this.timeout(0);
+
+        const originalFee = await takoyakiContract.getTakoyaki(tokenId).then(token => token.upkeepFee);
+
+        await fastForward(REGISTRATION_PERIOD + 1);
+
+        let error = null;
+        let updatedFee = null;
+        try {
+            updatedFee = await Takoyaki.syncUpkeepFee(admin, admin, tokenId);
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "Sync fee should fail");
+
+        const token = await takoyakiContract.getTakoyaki(tokenId);
+        assert.ok(token.upkeepFee.eq(originalFee), "token should have same upkeep fee");
+    });
+
+    it("Called for invalid token", async function() {
+        const takoyaki = Takoyaki.connect(owner);
+        const syncTx = await takoyaki.syncUpkeepFee("333");
+        let error = null;
+        try {
+            await syncTx.wait();
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "Sync fee should fail");
+    });
 });
 
 describe("ERC-721 Operations", function() {
