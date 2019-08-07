@@ -238,6 +238,95 @@ describe("Name Registration (happy path)", function() {
     });
 });
 
+describe("Commits and reveals", function() {
+    it('should allow multiple commits by different signers', async function() {
+        const signer1 = await provider.createSigner();
+        const signer2 = await provider.createSigner();
+        const label = "dragon";
+        let error = null;
+
+        try {
+            let takoyaki = Takoyaki.connect(signer1);
+            const blindedCommit1 = await Takoyaki.submitBlindedCommit(
+              provider,
+              signer1,
+              label
+            );
+
+            takoyaki = Takoyaki.connect(signer2);
+            const blindedCommit2 = await Takoyaki.submitBlindedCommit(
+              provider,
+              signer2,
+              label
+            );
+
+        } catch (err) {
+             error = err;
+        }
+
+        assert.ok(error === null, "multiple commits should work");
+    });
+
+    it('should fail subsequent reveal', async function() {
+        const label = 'shiny';
+        const signer1 = await provider.createSigner("0.22");
+        const receipt1 = await Takoyaki.register(provider, signer1, label);
+
+        const signer2 = await provider.createSigner("0.22");
+
+        let error = null;
+        try {
+            const receipt2 = await Takoyaki.register(provider, signer2, label);
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "Second registration should fail");
+    });
+
+    it('should allow subsequent reveal if the name has expired and past grace period', async function() {
+        this.timeout(0);
+
+        const label = 'tree';
+        let error = null;
+
+        try {
+            const signer1 = await provider.createSigner("0.22");
+            const receipt1 = await Takoyaki.register(provider, signer1, label);
+
+            await fastForward(REGISTRATION_PERIOD + GRACE_PERIOD + 1);
+
+            const signer2 = await provider.createSigner("0.22");
+            const receipt2 = await Takoyaki.register(provider, signer2, label);
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error === null, "Second registration should pass");
+    });
+
+    it('should fail subsequent reveal if the name has expired but within grace period', async function() {
+        this.timeout(0);
+
+        const label = 'tree';
+        let error = null;
+
+        try {
+            const signer1 = await provider.createSigner("0.22");
+            const receipt1 = await Takoyaki.register(provider, signer1, label);
+
+            await fastForward(REGISTRATION_PERIOD + 1);
+
+            const signer2 = await provider.createSigner("0.22");
+            const receipt2 = await Takoyaki.register(provider, signer2, label);
+        } catch (err) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "Second registration should fail");
+    });
+});
+
 describe('Renew registration', function() {
   it('can renew after reveal', async function() {
     const label = 'bumble';
