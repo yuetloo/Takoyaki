@@ -753,6 +753,26 @@ describe("ERC-721 Operations", function() {
     });
 });
 
+describe("Approval", function() {
+     it("happy path", async function() {
+        const label = 'throne';
+        const owner = await provider.createSigner();
+        const receipt = await Takoyaki.register(provider, owner, label);
+
+        const takoyaki = Takoyaki.connect(owner);
+        const tokenId = Takoyaki.getTokenId(takoyaki, receipt);
+        let approved = await takoyaki.getApproved(tokenId);
+        console.log('approved 1', approved);
+        assert.ok(approved === ethers.constants.AddressZero, "approved should default to zero");
+
+        const newOwner = await provider.createrSigner();
+        const approveReceipt = await takoyaki.approve(newOwner.address, tokenId);
+        approved = await takoyaki.getApproved(tokenId);
+        console.log('approved 2', approved);
+        assert.ok(approved === newOwner.address, "approved should equal to newOwner");
+     });
+});
+
 describe("Name Validatation", function() {
     describe("Valid Names", function() {
         [ "loo", "ricmoo", "ricmoo01234567890123",
