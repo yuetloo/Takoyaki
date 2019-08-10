@@ -267,6 +267,30 @@ describe("Commits and reveals", function() {
         assert.ok(error === null, "multiple commits should work");
     });
 
+    it("Cannot reveal after MAX_COMMIT_BLOCKS", async function() {
+        const label = "boom";
+        const signer = await provider.createSigner();
+        const takoyaki = Takoyaki.connect(signer);
+        const salt = ethers.utils.keccak256(ethers.utils.randomBytes(32));
+        let error = null;
+
+        let tx = await takoyaki.commit(label, signer.address, salt, ethers.constants.AddressZero, 0);
+        let receipt = await tx.wait();
+
+        // fast forward past the max commit blocks
+        await provider.mineBlocks(MAX_COMMIT_BLOCKS + 1);
+
+        try {
+            tx = await takoyaki.reveal(label, signer.address, salt);
+            receipt = await tx.wait();
+        } catch ( err ) {
+            error = err;
+        }
+
+        assert.ok( error && error.code === 'CALL_EXCEPTION', "Reveal should fail past max commit blocks");
+
+    });
+
     it('should fail subsequent reveal', async function() {
         const label = 'shiny';
         const signer1 = await provider.createSigner("0.22");
