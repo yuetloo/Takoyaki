@@ -14,13 +14,13 @@ jobs:
       - checkout
 
       - run:
-        name: Prepare to run parity
-        command: |
-          mkdir -p /tmp/parity/keys
-          cp -r tests/parity-keys /tmp/parity/keys/DevelopmentChain
-          cp tests/parity-dev.json /tmp/parity
-          cp tests/parity-dev.pwds /tmp/parity
-          chmod -R 777 /tmp/parity
+          name: Prepare to run parity
+          command: |
+            mkdir -p /tmp/parity/keys
+            cp -r tests/parity-keys /tmp/parity/keys/DevelopmentChain
+            cp tests/parity-dev.json /tmp/parity
+            cp tests/parity-dev.pwds /tmp/parity
+            chmod -R 777 /tmp/parity
 
       - run: ls -la /tmp/parity
 
