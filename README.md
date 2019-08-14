@@ -1,6 +1,8 @@
 takoyaki.eth
 ============
 
+[![CircleCI](https://circleci.com/gh/yuetloo/Takoyaki/tree/master.svg?style=svg&circle-token=0225bfdd50e75d7b92cd432084dff363f898a219)](https://circleci.com/gh/yuetloo/Takoyaki/tree/master)
+
 Each Takoyaki is a unique, cute ERC-721 Octopus token, which is also
 an [ENS name](https://ens.domains). It is meant as a fun and easy way
 to start your foray into ENS, which allows you to use a friendly name
