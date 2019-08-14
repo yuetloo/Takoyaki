@@ -64,4 +64,3 @@ jobs:
            nvm install 10.15.3
            node -v
            npm test
-           date
